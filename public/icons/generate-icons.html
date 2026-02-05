@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FitFlow Icon Generator</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        canvas { border: 1px solid #ccc; margin: 10px; }
+        .icon-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; }
+        .icon-item { text-align: center; }
+        button { padding: 10px 20px; margin: 5px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>FitFlow PWA Icon Generator</h1>
+    <p>This will generate all the required icons for your PWA. Click "Generate All Icons" to create them.</p>
+    
+    <button onclick="generateAllIcons()">Generate All Icons</button>
+    <button onclick="downloadAll()">Download All</button>
+    
+    <div id="iconGrid" class="icon-grid"></div>
+
+    <script>
+        const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+        const canvases = {};
+
+        function createIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = '#4f46e5';
+            ctx.fillRect(0, 0, size, size);
+
+            // Dumbbell icon (simplified)
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const scale = size / 100;
+
+            ctx.fillStyle = '#ffffff';
+            
+            // Dumbbell bar
+            ctx.fillRect(centerX - 25 * scale, centerY - 3 * scale, 50 * scale, 6 * scale);
+            
+            // Left weight
+            ctx.fillRect(centerX - 35 * scale, centerY - 12 * scale, 15 * scale, 24 * scale);
+            ctx.fillRect(centerX - 40 * scale, centerY - 8 * scale, 8 * scale, 16 * scale);
+            
+            // Right weight  
+            ctx.fillRect(centerX + 20 * scale, centerY - 12 * scale, 15 * scale, 24 * scale);
+            ctx.fillRect(centerX + 32 * scale, centerY - 8 * scale, 8 * scale, 16 * scale);
+
+            // Add "FF" text for smaller icons
+            if (size >= 128) {
+                ctx.font = `bold ${size * 0.15}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText('FF', centerX, centerY + size * 0.25);
+            }
+
+            return canvas;
+        }
+
+        function generateAllIcons() {
+            const grid = document.getElementById('iconGrid');
+            grid.innerHTML = '';
+
+            sizes.forEach(size => {
+                const canvas = createIcon(size);
+                canvases[size] = canvas;
+
+                const container = document.createElement('div');
+                container.className = 'icon-item';
+                
+                const label = document.createElement('div');
+                label.textContent = `${size}x${size}`;
+                
+                const downloadBtn = document.createElement('button');
+                downloadBtn.textContent = 'Download';
+                downloadBtn.onclick = () => downloadIcon(size);
+
+                container.appendChild(label);
+                container.appendChild(canvas);
+                container.appendChild(downloadBtn);
+                grid.appendChild(container);
+            });
+        }
+
+        function downloadIcon(size) {
+            const canvas = canvases[size];
+            const link = document.createElement('a');
+            link.download = `icon-${size}x${size}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        function downloadAll() {
+            sizes.forEach(size => {
+                setTimeout(() => downloadIcon(size), size * 10); // Stagger downloads
+            });
+        }
+
+        // Generate icons on load
+        window.onload = generateAllIcons;
+    </script>
+</body>
+</html>

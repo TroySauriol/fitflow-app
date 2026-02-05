@@ -1,0 +1,12 @@
+<svg width="192" height="192" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+    <rect width="192" height="192" fill="#4f46e5" rx="19.200000000000003"/>
+    <g transform="translate(38.400000000000006, 57.599999999999994)">
+      <!-- Dumbbell icon -->
+      <rect x="28.799999999999997" y="34.56" width="57.599999999999994" height="7.68" fill="white"/>
+      <rect x="9.600000000000001" y="23.04" width="23.04" height="30.72" fill="white"/>
+      <rect x="82.56" y="23.04" width="23.04" height="30.72" fill="white"/>
+      <rect x="0" y="26.880000000000003" width="15.36" height="23.04" fill="white"/>
+      <rect x="99.84" y="26.880000000000003" width="15.36" height="23.04" fill="white"/>
+    </g>
+    <text x="96" y="144" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="23.04" font-weight="bold">FF</text>
+  </svg>

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.local
+server/.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+temp-*/
+*.zip
+
+# AWS deployment files (optional - keep if you want them in repo)
+# aws-deployment/node_modules/
