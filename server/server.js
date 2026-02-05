@@ -32,7 +32,9 @@ const muscleGroupExercises = {
   shoulders: [
     'overhead press', 'shoulder press', 'lateral raise', 'front raise',
     'rear delt fly', 'upright row', 'arnold press', 'pike push-up',
-    'military press', 'bradford press', 'bus driver'
+    'military press', 'bradford press', 'bus driver', 'face pull',
+    'dumbbell press', 'cable lateral raise', 'reverse fly', 'shrug',
+    'seated press', 'standing press', 'push press', 'landmine press'
   ],
   arms: [
     'curl', 'tricep extension', 'hammer curl', 'close-grip bench', 'tricep dip',
@@ -166,29 +168,41 @@ app.post('/api/workout', async (req, res) => {
 1. If user asks for "chest and back" - ONLY include chest and back exercises
 2. If user asks for "chest" - ONLY chest exercises (bench press, push-ups, flyes, dips)
 3. If user asks for "back" - ONLY back exercises (pull-ups, rows, lat pulldowns)
-4. NEVER EVER add leg exercises unless legs are specifically mentioned
-5. NEVER EVER add shoulder exercises unless shoulders are specifically mentioned
-6. NEVER add random exercises that don't directly target requested muscles
+4. If user asks for "7 exercises" - YOU MUST PROVIDE EXACTLY 7 EXERCISES
+5. If user asks for "5 exercises" - YOU MUST PROVIDE EXACTLY 5 EXERCISES
+6. NEVER EVER add leg exercises unless legs are specifically mentioned
+7. NEVER EVER add shoulder exercises unless shoulders are specifically mentioned
+8. NEVER add random exercises that don't directly target requested muscles
+
+🔢 EXERCISE COUNT RULES:
+- User specifies number → Provide EXACTLY that many exercises
+- No number specified → Provide 5-6 exercises
+- "Few exercises" → Provide 3-4 exercises
+- "Many exercises" → Provide 7-8 exercises
+- NEVER provide fewer exercises than requested
 
 🚫 ABSOLUTELY FORBIDDEN COMBINATIONS:
 - Chest/Back workout → NO squats, lunges, leg press, split squats, bulgarian split squats
 - Upper body workout → NO leg exercises of any kind
 - Leg workout → NO bench press, push-ups, pull-ups, rows, curls
 - Arms workout → NO leg exercises, NO chest exercises
+- Shoulder workout → NO leg exercises, NO chest exercises (unless specifically requested)
 
 ✅ MUSCLE GROUP EXERCISE LISTS (USE ONLY THESE):
-CHEST ONLY: Bench press, push-ups, chest flyes, incline press, decline press, dips, chest press, cable crossovers
-BACK ONLY: Pull-ups, rows, lat pulldowns, deadlifts, face pulls, reverse flyes, cable rows, t-bar rows
-LEGS ONLY: Squats, lunges, leg press, leg curls, leg extensions, calf raises, hip thrusts, step-ups, bulgarian split squats
-SHOULDERS ONLY: Overhead press, lateral raises, front raises, rear delt flyes, upright rows, arnold press
-ARMS ONLY: Curls, tricep extensions, hammer curls, close-grip bench press, tricep dips, skull crushers
-CORE ONLY: Planks, crunches, leg raises, russian twists, mountain climbers, ab wheel
+CHEST ONLY: Bench press, push-ups, chest flyes, incline press, decline press, dips, chest press, cable crossovers, dumbbell press
+BACK ONLY: Pull-ups, rows, lat pulldowns, deadlifts, face pulls, reverse flyes, cable rows, t-bar rows, seal rows
+LEGS ONLY: Squats, lunges, leg press, leg curls, leg extensions, calf raises, hip thrusts, step-ups, bulgarian split squats, romanian deadlifts
+SHOULDERS ONLY: Overhead press, lateral raises, front raises, rear delt flyes, upright rows, arnold press, pike push-ups, face pulls
+ARMS ONLY: Curls, tricep extensions, hammer curls, close-grip bench press, tricep dips, skull crushers, cable curls, concentration curls
+CORE ONLY: Planks, crunches, leg raises, russian twists, mountain climbers, ab wheel, dead bugs, hollow holds
 
 🔍 VALIDATION CHECKLIST (CHECK BEFORE RESPONDING):
 □ Does EVERY exercise directly target the requested muscle group?
+□ Did I provide the EXACT number of exercises requested?
 □ Are there ANY leg exercises in an upper body workout? (If YES, REMOVE THEM)
 □ Are there ANY upper body exercises in a leg workout? (If YES, REMOVE THEM)
 □ Did I accidentally add exercises from a different muscle group? (If YES, REMOVE THEM)
+□ Did I exclude the exercises the user specifically said to avoid?
 
 📋 RESPONSE FORMAT - JSON ONLY (NO MARKDOWN, NO EXPLANATIONS):
 {
@@ -206,12 +220,25 @@ CORE ONLY: Planks, crunches, leg raises, russian twists, mountain climbers, ab w
   "description": "Brief overview of ONLY the requested muscles"
 }
 
-⚠️ FINAL CHECK: Before responding, verify EVERY exercise targets ONLY the requested muscles. Remove ANY exercise that doesn't match.`;
+⚠️ FINAL CHECK: Before responding, verify:
+1. EVERY exercise targets ONLY the requested muscles
+2. You provided the EXACT number of exercises requested
+3. You excluded any exercises the user said to avoid
+4. Remove ANY exercise that doesn't match.`;
 
     const userPrompt = preferences 
       ? `${systemPrompt}\n\n🔧 USER PREFERENCES/LIMITATIONS:\n${preferences}\n\n💬 USER REQUEST: ${prompt}\n\n⚠️ REMEMBER: ONLY include exercises for the specific muscles mentioned in the request above! NO leg exercises in upper body workouts! NO upper body exercises in leg workouts!`
       : `${systemPrompt}\n\n💬 USER REQUEST: ${prompt}\n\n⚠️ REMEMBER: ONLY include exercises for the specific muscles mentioned in the request above! NO leg exercises in upper body workouts! NO upper body exercises in leg workouts!`;
 
+    // Extract number of exercises requested
+    const exerciseCountMatch = prompt.match(/(\d+)\s*exercise/i);
+    const requestedCount = exerciseCountMatch ? parseInt(exerciseCountMatch[1]) : 5;
+    
+    // Adjust token limit based on requested exercises (each exercise needs ~100-150 tokens)
+    const tokenLimit = Math.max(800, requestedCount * 150 + 300);
+    
+    console.log(`📊 Requested ${requestedCount} exercises, setting token limit to ${tokenLimit}`);
+    
     const response = await fetch(OLLAMA_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -220,10 +247,10 @@ CORE ONLY: Planks, crunches, leg raises, russian twists, mountain climbers, ab w
         prompt: userPrompt,
         stream: false,
         options: {
-          temperature: 0.1, // Low temperature for consistent following
-          top_p: 0.8,
+          temperature: 0.2, // Slightly higher for more variety
+          top_p: 0.9,
           repeat_penalty: 1.2,
-          num_predict: 800
+          num_predict: tokenLimit // Dynamic based on request
         }
       }),
     });
