@@ -1,0 +1,9 @@
+{
+  "name": "workout-generator-lambda",
+  "version": "1.0.0",
+  "description": "AWS Lambda function for workout generation using Bedrock",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.400.0"
+  }
+}
