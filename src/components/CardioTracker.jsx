@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import './CardioTracker.css'
+import HeartRateMonitor from '../services/heartRateMonitor'
+import HeartRateZones from '../services/heartRateZones'
 
 export default function CardioTracker({ 
   cardioSessions, 
@@ -24,11 +26,30 @@ export default function CardioTracker({
   const [currentSpeed, setCurrentSpeed] = useState(0)
   const [route, setRoute] = useState([]) // Array of {lat, lng, timestamp}
   
+  // Heart Rate Monitor state
+  const [hrMonitor] = useState(() => new HeartRateMonitor())
+  const [hrZones] = useState(() => new HeartRateZones(30)) // Default age 30, can be customized
+  const [currentHR, setCurrentHR] = useState(0)
+  const [avgHR, setAvgHR] = useState(0)
+  const [maxHR, setMaxHR] = useState(0)
+  const [hrHistory, setHrHistory] = useState([])
+  const [hrConnected, setHrConnected] = useState(false)
+  const [hrDeviceName, setHrDeviceName] = useState('')
+  const [hrError, setHrError] = useState(null)
+  const [timeInZones, setTimeInZones] = useState({
+    recovery: 0,
+    fatBurn: 0,
+    cardio: 0,
+    threshold: 0,
+    peak: 0
+  })
+  
   const intervalRef = useRef(null)
   const startTimeRef = useRef(null)
   const pausedTimeRef = useRef(0)
   const watchIdRef = useRef(null)
   const lastPositionRef = useRef(null)
+  const lastZoneUpdateRef = useRef(Date.now())
 
   // Check GPS availability on mount
   useEffect(() => {
@@ -123,6 +144,60 @@ export default function CardioTracker({
       }
     }
   }, [isRunning, isPaused, useGPS, gpsAvailable])
+
+  // Heart Rate Monitor tracking
+  useEffect(() => {
+    if (isRunning && !isPaused && hrConnected) {
+      // Update time in zones every second
+      const zoneInterval = setInterval(() => {
+        if (currentHR > 0) {
+          const zone = hrZones.getCurrentZone(currentHR)
+          if (zone && zone.key !== 'resting' && zone.key !== 'maximum') {
+            setTimeInZones(prev => ({
+              ...prev,
+              [zone.key]: prev[zone.key] + 1
+            }))
+          }
+        }
+      }, 1000)
+
+      return () => clearInterval(zoneInterval)
+    }
+  }, [isRunning, isPaused, hrConnected, currentHR, hrZones])
+
+  // Setup heart rate monitor callbacks
+  useEffect(() => {
+    hrMonitor.onHeartRateChange = (hr) => {
+      if (hr && hr > 0) {
+        setCurrentHR(hr)
+        setHrHistory(prev => [...prev, { hr, timestamp: Date.now() }])
+        
+        // Update max HR
+        if (hr > maxHR) {
+          setMaxHR(hr)
+        }
+        
+        // Calculate average HR
+        const recentHistory = [...hrHistory, { hr }].slice(-60) // Last 60 readings
+        const avg = recentHistory.reduce((sum, h) => sum + h.hr, 0) / recentHistory.length
+        setAvgHR(Math.round(avg))
+      }
+    }
+
+    hrMonitor.onConnectionChange = (connected) => {
+      setHrConnected(connected)
+      if (!connected) {
+        setCurrentHR(0)
+        setHrDeviceName('')
+        setHrError('Heart rate monitor disconnected')
+      }
+    }
+
+    return () => {
+      hrMonitor.onHeartRateChange = null
+      hrMonitor.onConnectionChange = null
+    }
+  }, [hrMonitor, hrHistory, maxHR])
 
   // Timer logic
   useEffect(() => {
@@ -263,7 +338,13 @@ export default function CardioTracker({
       notes: sessionNotes,
       calories: estimateCalories(),
       gpsTracked: useGPS,
-      route: useGPS ? route : null
+      route: useGPS ? route : null,
+      heartRate: hrConnected ? {
+        average: avgHR,
+        maximum: maxHR,
+        history: hrHistory,
+        timeInZones: timeInZones
+      } : null
     }
     
     onSaveSession(session)
@@ -278,6 +359,48 @@ export default function CardioTracker({
     setCurrentSpeed(0)
     lastPositionRef.current = null
     setShowSaveModal(false)
+    
+    // Reset HR data
+    setCurrentHR(0)
+    setAvgHR(0)
+    setMaxHR(0)
+    setHrHistory([])
+    setTimeInZones({
+      recovery: 0,
+      fatBurn: 0,
+      cardio: 0,
+      threshold: 0,
+      peak: 0
+    })
+  }
+
+  // Heart Rate Monitor handlers
+  const handleConnectHR = async () => {
+    const support = hrMonitor.isSupported()
+    if (!support.supported) {
+      setHrError(support.reason)
+      alert(support.reason + '\n\nTry using Chrome or Edge browser.')
+      return
+    }
+
+    setHrError(null)
+    const result = await hrMonitor.connect()
+    
+    if (result.success) {
+      setHrDeviceName(result.deviceName)
+      setHrConnected(true)
+      alert(`✅ Connected to ${result.deviceName}!`)
+    } else {
+      setHrError(result.error)
+      alert(`❌ ${result.error}`)
+    }
+  }
+
+  const handleDisconnectHR = async () => {
+    await hrMonitor.disconnect()
+    setHrConnected(false)
+    setCurrentHR(0)
+    setHrDeviceName('')
   }
 
   // Estimate calories burned (rough estimate)
@@ -388,6 +511,32 @@ export default function CardioTracker({
             </div>
           )}
 
+          {/* Heart Rate Monitor Toggle */}
+          <div className="hr-toggle-container">
+            {!hrConnected ? (
+              <button className="btn-connect-hr" onClick={handleConnectHR} disabled={isRunning}>
+                ❤️ Connect Heart Rate Monitor
+              </button>
+            ) : (
+              <div className="hr-connected-info">
+                <div className="hr-device-name">
+                  ❤️ {hrDeviceName}
+                  {isRunning && !isPaused && currentHR > 0 && (
+                    <span className="hr-live-indicator">● Live</span>
+                  )}
+                </div>
+                {!isRunning && (
+                  <button className="btn-disconnect-hr" onClick={handleDisconnectHR}>
+                    Disconnect
+                  </button>
+                )}
+              </div>
+            )}
+            {hrError && (
+              <div className="hr-error">⚠️ {hrError}</div>
+            )}
+          </div>
+
           {/* Activity Type Selector */}
           <div className="activity-selector">
             <button
@@ -478,7 +627,44 @@ export default function CardioTracker({
                 <div className="stat-label">Current Lap</div>
                 <div className="stat-value">{currentLap}</div>
               </div>
+
+              {hrConnected && currentHR > 0 && (
+                <div className="stat-box hr-stat-box">
+                  <div className="stat-label">Heart Rate</div>
+                  <div className="stat-value hr-value">{currentHR}</div>
+                  <div className="stat-unit">BPM</div>
+                </div>
+              )}
             </div>
+
+            {/* Heart Rate Zone Display */}
+            {hrConnected && currentHR > 0 && (
+              <div className="hr-zone-display">
+                {(() => {
+                  const zone = hrZones.getCurrentZone(currentHR)
+                  return zone ? (
+                    <>
+                      <div className="hr-zone-name" style={{ color: zone.color }}>
+                        {zone.name} Zone
+                      </div>
+                      <div className="hr-zone-bar">
+                        <div 
+                          className="hr-zone-fill" 
+                          style={{ 
+                            width: `${(currentHR / hrZones.maxHR) * 100}%`,
+                            background: zone.color
+                          }}
+                        />
+                      </div>
+                      <div className="hr-zone-stats">
+                        <span>Avg: {avgHR} BPM</span>
+                        <span>Max: {maxHR} BPM</span>
+                      </div>
+                    </>
+                  ) : null
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Control Buttons */}
@@ -562,6 +748,9 @@ export default function CardioTracker({
                       {session.gpsTracked && (
                         <span className="gps-badge">📍 GPS</span>
                       )}
+                      {session.heartRate && (
+                        <span className="session-hr-badge">❤️ HR</span>
+                      )}
                     </div>
                     <div className="session-date">
                       {new Date(session.date).toLocaleDateString()}
@@ -590,6 +779,18 @@ export default function CardioTracker({
                       <span className="session-stat-label">Calories:</span>
                       <span className="session-stat-value">{session.calories} kcal</span>
                     </div>
+                    {session.heartRate && (
+                      <>
+                        <div className="session-stat">
+                          <span className="session-stat-label">Avg HR:</span>
+                          <span className="session-stat-value">{session.heartRate.average} BPM</span>
+                        </div>
+                        <div className="session-stat">
+                          <span className="session-stat-label">Max HR:</span>
+                          <span className="session-stat-value">{session.heartRate.maximum} BPM</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                   {session.notes && (
                     <div className="session-notes">
