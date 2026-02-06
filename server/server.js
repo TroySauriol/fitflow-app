@@ -90,7 +90,7 @@ function detectRequestedMusclesFromPrompt(prompt) {
   if (promptLower.includes('chest') || promptLower.includes('pec')) requestedMuscles.push('chest');
   if (promptLower.includes('back') || promptLower.includes('lat')) requestedMuscles.push('back');
   if (promptLower.includes('leg') || promptLower.includes('quad') || promptLower.includes('hamstring') || promptLower.includes('glute')) requestedMuscles.push('legs');
-  if (promptLower.includes('shoulder') || promptLower.includes('delt')) requestedMuscles.push('shoulders');
+  if (promptLower.includes('shoulder') || promptLower.includes('delt') || promptLower.includes('rotator cuff')) requestedMuscles.push('shoulders');
   if (promptLower.includes('arm') || promptLower.includes('bicep') || promptLower.includes('tricep')) requestedMuscles.push('arms');
   if (promptLower.includes('core') || promptLower.includes('ab')) requestedMuscles.push('core');
 
@@ -105,6 +105,28 @@ function detectRequestedMusclesFromPrompt(prompt) {
   }
 
   return [...new Set(requestedMuscles)];
+}
+
+// Detect if request is for rehab/recovery/stretching
+function detectWorkoutType(prompt) {
+  const promptLower = prompt.toLowerCase();
+  
+  const isRehab = promptLower.includes('rehab') || 
+                  promptLower.includes('recovery') || 
+                  promptLower.includes('injury') ||
+                  promptLower.includes('torn') ||
+                  promptLower.includes('hurt') ||
+                  promptLower.includes('pain');
+  
+  const isStretching = promptLower.includes('stretch') || 
+                       promptLower.includes('flexibility') || 
+                       promptLower.includes('mobility');
+  
+  const isLowImpact = promptLower.includes('low impact') || 
+                      promptLower.includes('gentle') || 
+                      promptLower.includes('easy');
+  
+  return { isRehab, isStretching, isLowImpact };
 }
 
 function validateExerciseRelevance(exercise, requestedMuscles) {
@@ -161,8 +183,98 @@ app.post('/api/workout', async (req, res) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
-    // Enhanced system prompt with ultra-strict muscle group focus
-    const systemPrompt = `You are an expert fitness coach. You MUST create workouts that ONLY target the specific muscles requested.
+    // Detect workout type
+    const workoutType = detectWorkoutType(prompt);
+    const requestedMuscles = detectRequestedMusclesFromPrompt(prompt);
+    
+    console.log(`🎯 Workout type: ${JSON.stringify(workoutType)}`);
+    console.log(`📋 Target muscles: ${requestedMuscles.join(', ')}`);
+
+    // Build specialized system prompt based on workout type
+    let systemPrompt = '';
+    
+    if (workoutType.isRehab) {
+      systemPrompt = `You are an expert physical therapist and rehabilitation specialist. Create a SAFE, GENTLE rehabilitation program.
+
+⚠️ CRITICAL REHABILITATION RULES:
+1. SAFETY FIRST - All exercises must be low-intensity and pain-free
+2. Focus on MOBILITY, FLEXIBILITY, and GENTLE STRENGTHENING
+3. Include proper WARM-UP and COOL-DOWN stretches
+4. Emphasize CONTROLLED MOVEMENTS with proper form
+5. Start with BODYWEIGHT or VERY LIGHT resistance
+6. Include REST periods and recovery guidance
+
+🏥 REHABILITATION EXERCISE TYPES:
+- Range of Motion (ROM) exercises
+- Gentle stretching (static and dynamic)
+- Isometric holds (no movement, just tension)
+- Light resistance band work
+- Controlled bodyweight movements
+- Mobility drills
+- Stability exercises
+
+⚠️ WHAT TO AVOID IN REHAB:
+- Heavy weights or high resistance
+- Explosive or ballistic movements
+- Exercises that cause pain
+- Overhead pressing (for shoulder injuries)
+- Deep squats (for knee injuries)
+- High-impact movements
+
+📋 RESPONSE FORMAT - JSON ONLY:
+{
+  "name": "Rehabilitation Program for [Injury]",
+  "muscles": ["affected", "area"],
+  "exercises": [
+    {
+      "name": "Exercise Name",
+      "sets": 2-3,
+      "reps": "10-15" or "Hold 20-30 seconds",
+      "weight": "Bodyweight" or "Very Light",
+      "description": "Detailed form cues emphasizing SAFETY and CONTROL. Mention: 'Stop if you feel pain.'"
+    }
+  ],
+  "description": "Safe rehabilitation program focusing on recovery, mobility, and gentle strengthening. Always consult with a healthcare professional before starting."
+}
+
+⚠️ MEDICAL DISCLAIMER: Include reminder to consult healthcare professional.`;
+    } else if (workoutType.isStretching) {
+      systemPrompt = `You are an expert flexibility and mobility coach. Create a comprehensive STRETCHING and MOBILITY routine.
+
+🧘 STRETCHING PROGRAM RULES:
+1. Include both STATIC and DYNAMIC stretches
+2. Focus on FULL BODY or TARGETED areas as requested
+3. Emphasize PROPER BREATHING and RELAXATION
+4. Include hold times (20-30 seconds for static, 10-15 reps for dynamic)
+5. Progress from gentle to deeper stretches
+6. Include mobility drills for joint health
+
+✅ STRETCHING EXERCISE TYPES:
+- Static stretches (hold position)
+- Dynamic stretches (controlled movement)
+- PNF stretching (contract-relax)
+- Mobility drills (joint circles, flows)
+- Foam rolling suggestions
+- Yoga-inspired poses
+
+📋 RESPONSE FORMAT - JSON ONLY:
+{
+  "name": "Flexibility & Mobility Routine",
+  "muscles": ["targeted", "areas"],
+  "exercises": [
+    {
+      "name": "Stretch Name",
+      "sets": 2-3,
+      "reps": "Hold 20-30 seconds" or "10-15 reps",
+      "weight": "Bodyweight",
+      "description": "Detailed instructions on proper form, breathing, and progression. Mention: 'Stretch to mild tension, never pain.'"
+    }
+  ],
+  "description": "Comprehensive stretching routine to improve flexibility, mobility, and recovery."
+}`;
+    } else {
+      // Standard workout prompt (existing)
+      systemPrompt = `You are an expert fitness coach. You MUST create workouts that ONLY target the specific muscles requested.
 
 ⚠️ CRITICAL RULES - VIOLATION WILL RESULT IN REJECTION:
 1. If user asks for "chest and back" - ONLY include chest and back exercises
@@ -225,6 +337,7 @@ CORE ONLY: Planks, crunches, leg raises, russian twists, mountain climbers, ab w
 2. You provided the EXACT number of exercises requested
 3. You excluded any exercises the user said to avoid
 4. Remove ANY exercise that doesn't match.`;
+    }
 
     const userPrompt = preferences 
       ? `${systemPrompt}\n\n🔧 USER PREFERENCES/LIMITATIONS:\n${preferences}\n\n💬 USER REQUEST: ${prompt}\n\n⚠️ REMEMBER: ONLY include exercises for the specific muscles mentioned in the request above! NO leg exercises in upper body workouts! NO upper body exercises in leg workouts!`
