@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 server/node_modules/
+aws-deployment/node_modules/
 
 # Build output
 dist/
@@ -25,6 +26,11 @@ npm-debug.log*
 # Temporary files
 temp-*/
 *.zip
+*.bat
+*.ps1
 
-# AWS deployment files (optional - keep if you want them in repo)
-# aws-deployment/node_modules/
+# Test files
+test-*.js
+
+# Generated files
+generate-*.js
