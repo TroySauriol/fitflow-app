@@ -212,6 +212,7 @@ function App() {
             workoutTemplates={workoutTemplates}
             onDelete={handleDeleteWorkoutTemplate}
             onScheduleWorkout={handleSaveCalendarWorkout}
+            onSaveTemplate={handleSaveWorkoutTemplate}
           />
         )}
         {activeTab === 'records' && (
