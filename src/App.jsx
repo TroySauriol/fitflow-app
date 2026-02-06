@@ -7,12 +7,14 @@ import WorkoutCalendar from './components/WorkoutCalendar'
 import AccountSidebar from './components/AccountSidebar'
 import Progress from './components/Progress'
 import Dashboard from './components/Dashboard'
+import CardioTracker from './components/CardioTracker'
 import Logo from './components/Logo'
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [workoutTemplates, setWorkoutTemplates] = useState([]) // Saved workout routines (menu)
   const [calendarWorkouts, setCalendarWorkouts] = useState([]) // Scheduled/completed workouts
+  const [cardioSessions, setCardioSessions] = useState([]) // Cardio tracking sessions
   const [personalRecords, setPersonalRecords] = useState({})
   const [preferences, setPreferences] = useState({
     injuries: [],
@@ -24,10 +26,12 @@ function App() {
   useEffect(() => {
     const templates = localStorage.getItem('workoutTemplates')
     const calendar = localStorage.getItem('calendarWorkouts')
+    const cardio = localStorage.getItem('cardioSessions')
     const records = localStorage.getItem('personalRecords')
     const prefs = localStorage.getItem('userPreferences')
     if (templates) setWorkoutTemplates(JSON.parse(templates))
     if (calendar) setCalendarWorkouts(JSON.parse(calendar))
+    if (cardio) setCardioSessions(JSON.parse(cardio))
     if (records) setPersonalRecords(JSON.parse(records))
     if (prefs) setPreferences(JSON.parse(prefs))
   }, [])
@@ -95,6 +99,25 @@ function App() {
     localStorage.setItem('personalRecords', JSON.stringify(updated))
   }
 
+  // Save cardio session
+  const handleSaveCardioSession = (session) => {
+    const newSessions = [...cardioSessions, session]
+    setCardioSessions(newSessions)
+    localStorage.setItem('cardioSessions', JSON.stringify(newSessions))
+  }
+
+  // Delete cardio session
+  const handleDeleteCardioSession = (id) => {
+    const filtered = cardioSessions.filter(s => s.id !== id)
+    setCardioSessions(filtered)
+    localStorage.setItem('cardioSessions', JSON.stringify(filtered))
+  }
+
+  // Navigate to chat for training plan
+  const handleGenerateTrainingPlan = () => {
+    setActiveTab('chat')
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -118,6 +141,12 @@ function App() {
           onClick={() => setActiveTab('chat')}
         >
           💬 Chat
+        </button>
+        <button
+          className={`nav-btn ${activeTab === 'cardio' ? 'active' : ''}`}
+          onClick={() => setActiveTab('cardio')}
+        >
+          🏃 Cardio
         </button>
         <button
           className={`nav-btn ${activeTab === 'calendar' ? 'active' : ''}`}
@@ -158,6 +187,14 @@ function App() {
           <ChatInterface 
             onSaveWorkout={handleSaveWorkoutTemplate}
             preferences={preferences}
+          />
+        )}
+        {activeTab === 'cardio' && (
+          <CardioTracker
+            cardioSessions={cardioSessions}
+            onSaveSession={handleSaveCardioSession}
+            onDeleteSession={handleDeleteCardioSession}
+            onGenerateTrainingPlan={handleGenerateTrainingPlan}
           />
         )}
         {activeTab === 'calendar' && (

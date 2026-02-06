@@ -365,7 +365,7 @@ function buildPreferenceContext(preferences) {
   return context;
 }
 
-// Detect workout type (rehab, stretching, etc.)
+// Detect workout type (rehab, stretching, cardio, etc.)
 function detectWorkoutType(prompt) {
   const promptLower = prompt.toLowerCase();
   
@@ -384,14 +384,85 @@ function detectWorkoutType(prompt) {
                       promptLower.includes('gentle') || 
                       promptLower.includes('easy');
   
-  return { isRehab, isStretching, isLowImpact };
+  const isCardio = promptLower.includes('running') ||
+                   promptLower.includes('run') ||
+                   promptLower.includes('5k') ||
+                   promptLower.includes('10k') ||
+                   promptLower.includes('marathon') ||
+                   promptLower.includes('half marathon') ||
+                   promptLower.includes('training plan') ||
+                   promptLower.includes('race') ||
+                   promptLower.includes('cardio') ||
+                   promptLower.includes('endurance');
+  
+  return { isRehab, isStretching, isLowImpact, isCardio };
 }
 
 // Build specialized system prompt based on workout type
 function buildSystemPrompt(workoutType, userPrompt, preferences) {
   let systemPrompt = '';
   
-  if (workoutType.isRehab) {
+  if (workoutType.isCardio) {
+    systemPrompt = `You are an expert running coach and endurance training specialist. Create a DETAILED, PROGRESSIVE training plan.
+
+🏃 CARDIO TRAINING PLAN RULES:
+1. Assess current fitness level from user's description
+2. Create a WEEK-BY-WEEK progressive plan
+3. Include specific distances, paces, and workout types
+4. Balance hard days with easy/recovery days
+5. Include rest days for recovery
+6. Build volume gradually (10% rule)
+7. Include taper period before race day
+
+📅 TRAINING PLAN STRUCTURE:
+- Easy Runs: Conversational pace, aerobic base building
+- Tempo Runs: Comfortably hard pace, lactate threshold
+- Interval Training: Short fast repeats with recovery
+- Long Runs: Build endurance, increase weekly
+- Recovery Runs: Very easy pace, active recovery
+- Rest Days: Complete rest or cross-training
+
+🎯 PLAN COMPONENTS:
+- Weekly mileage/distance targets
+- Specific workout descriptions
+- Pace guidelines (easy, moderate, hard)
+- Recovery recommendations
+- Race day strategy
+
+📋 RESPONSE FORMAT - JSON ONLY:
+{
+  "name": "Training Plan Name (e.g., '4-Week 5K Training Plan')",
+  "type": "cardio_plan",
+  "goal": "Race distance and target time",
+  "duration": "Number of weeks",
+  "weeks": [
+    {
+      "week": 1,
+      "focus": "Base building / Speed work / Taper",
+      "totalDistance": "Weekly total in km or miles",
+      "workouts": [
+        {
+          "day": "Monday",
+          "type": "Easy Run / Tempo / Intervals / Long Run / Rest",
+          "distance": "5K",
+          "pace": "Easy / Moderate / Hard",
+          "description": "Detailed workout instructions",
+          "notes": "Tips and reminders"
+        }
+      ]
+    }
+  ],
+  "tips": ["Race day tips", "Nutrition advice", "Recovery tips"],
+  "description": "Overview of the training plan philosophy"
+}
+
+⚠️ IMPORTANT:
+- Be specific with distances and paces
+- Explain WHY each workout matters
+- Include warm-up and cool-down
+- Mention injury prevention
+- Provide motivation and encouragement`;
+  } else if (workoutType.isRehab) {
     systemPrompt = `You are an expert physical therapist. Create a SAFE, GENTLE rehabilitation program.
 
 ⚠️ CRITICAL REHABILITATION RULES:
