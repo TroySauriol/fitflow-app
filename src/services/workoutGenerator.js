@@ -365,31 +365,153 @@ function buildPreferenceContext(preferences) {
   return context;
 }
 
+// Detect workout type (rehab, stretching, etc.)
+function detectWorkoutType(prompt) {
+  const promptLower = prompt.toLowerCase();
+  
+  const isRehab = promptLower.includes('rehab') || 
+                  promptLower.includes('recovery') || 
+                  promptLower.includes('injury') ||
+                  promptLower.includes('torn') ||
+                  promptLower.includes('hurt') ||
+                  promptLower.includes('pain');
+  
+  const isStretching = promptLower.includes('stretch') || 
+                       promptLower.includes('flexibility') || 
+                       promptLower.includes('mobility');
+  
+  const isLowImpact = promptLower.includes('low impact') || 
+                      promptLower.includes('gentle') || 
+                      promptLower.includes('easy');
+  
+  return { isRehab, isStretching, isLowImpact };
+}
+
+// Build specialized system prompt based on workout type
+function buildSystemPrompt(workoutType, userPrompt, preferences) {
+  let systemPrompt = '';
+  
+  if (workoutType.isRehab) {
+    systemPrompt = `You are an expert physical therapist. Create a SAFE, GENTLE rehabilitation program.
+
+⚠️ CRITICAL REHABILITATION RULES:
+1. SAFETY FIRST - All exercises must be low-intensity and pain-free
+2. Focus on MOBILITY, FLEXIBILITY, and GENTLE STRENGTHENING
+3. Include proper WARM-UP and COOL-DOWN stretches
+4. Emphasize CONTROLLED MOVEMENTS with proper form
+5. Start with BODYWEIGHT or VERY LIGHT resistance
+
+🏥 REHABILITATION EXERCISE TYPES:
+- Range of Motion (ROM) exercises
+- Gentle stretching (static and dynamic)
+- Isometric holds (no movement, just tension)
+- Light resistance band work
+- Controlled bodyweight movements
+
+📋 RESPONSE FORMAT - JSON ONLY:
+{
+  "name": "Rehabilitation Program for [Injury]",
+  "muscles": ["affected", "area"],
+  "exercises": [
+    {
+      "name": "Exercise Name",
+      "sets": 2-3,
+      "reps": "10-15" or "Hold 20-30 seconds",
+      "weight": "Bodyweight" or "Very Light",
+      "description": "Detailed form cues emphasizing SAFETY. Mention: 'Stop if you feel pain.'"
+    }
+  ],
+  "description": "Safe rehabilitation program. Always consult with a healthcare professional."
+}`;
+  } else if (workoutType.isStretching) {
+    systemPrompt = `You are an expert flexibility coach. Create a STRETCHING and MOBILITY routine.
+
+🧘 STRETCHING PROGRAM RULES:
+1. Include both STATIC and DYNAMIC stretches
+2. Focus on FULL BODY or TARGETED areas as requested
+3. Emphasize PROPER BREATHING and RELAXATION
+4. Include hold times (20-30 seconds for static)
+
+📋 RESPONSE FORMAT - JSON ONLY:
+{
+  "name": "Flexibility & Mobility Routine",
+  "muscles": ["targeted", "areas"],
+  "exercises": [
+    {
+      "name": "Stretch Name",
+      "sets": 2-3,
+      "reps": "Hold 20-30 seconds" or "10-15 reps",
+      "weight": "Bodyweight",
+      "description": "Detailed instructions. Mention: 'Stretch to mild tension, never pain.'"
+    }
+  ],
+  "description": "Comprehensive stretching routine to improve flexibility and mobility."
+}`;
+  } else {
+    systemPrompt = buildEnhancedPrompt(userPrompt, preferences);
+  }
+  
+  return systemPrompt;
+}
+
 // Main enhanced function
 export async function generateWorkout(userPrompt, preferences = {}) {
   try {
-    // Build enhanced prompt
-    const enhancedPrompt = buildEnhancedPrompt(userPrompt, preferences);
-    
     console.log(`🎯 Generating workout for: "${userPrompt}"`);
     const requestedMuscles = detectRequestedMuscles(userPrompt);
+    const workoutType = detectWorkoutType(userPrompt);
     console.log(`📋 Detected muscle groups: ${requestedMuscles.join(', ')}`);
+    console.log(`🎯 Workout type: ${JSON.stringify(workoutType)}`);
     
-    // Try to call the AI API
-    const response = await fetch('http://localhost:3000/api/workout', {
+    // Detect requested exercise count
+    const exerciseCountMatch = userPrompt.match(/(\d+)\s*exercise/i);
+    const requestedCount = exerciseCountMatch ? parseInt(exerciseCountMatch[1]) : 5;
+    const tokenLimit = Math.max(800, requestedCount * 150 + 300);
+    
+    // Build specialized prompt
+    const systemPrompt = buildSystemPrompt(workoutType, userPrompt, preferences);
+    const fullPrompt = preferences 
+      ? `${systemPrompt}\n\n🔧 USER PREFERENCES:\n${buildPreferenceContext(preferences)}\n\n💬 USER REQUEST: ${userPrompt}`
+      : `${systemPrompt}\n\n💬 USER REQUEST: ${userPrompt}`;
+    
+    // Try to call Ollama directly (works on AWS and locally)
+    const OLLAMA_URL = 'https://api.databi.io/api/generate';
+    
+    const response = await fetch(OLLAMA_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        prompt: enhancedPrompt,
-        preferences: buildPreferenceContext(preferences)
+      body: JSON.stringify({
+        model: 'llama3.1:latest',
+        prompt: fullPrompt,
+        stream: false,
+        options: {
+          temperature: 0.2,
+          top_p: 0.9,
+          repeat_penalty: 1.2,
+          num_predict: tokenLimit
+        }
       })
     });
 
     if (!response.ok) {
-      throw new Error('AI server unavailable');
+      throw new Error('Ollama server unavailable');
     }
 
-    let workout = await response.json();
+    const data = await response.json();
+    
+    // Parse JSON response
+    let jsonResponse = data.response.trim();
+    const jsonMatch = jsonResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonResponse = jsonMatch[0];
+    }
+    
+    jsonResponse = jsonResponse
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .trim();
+    
+    let workout = JSON.parse(jsonResponse);
     
     console.log(`📝 AI returned ${workout.exercises?.length || 0} exercises`);
     
