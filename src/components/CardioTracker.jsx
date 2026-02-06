@@ -18,10 +18,111 @@ export default function CardioTracker({
   const [activityType, setActivityType] = useState('run') // run, walk, cycle
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [sessionNotes, setSessionNotes] = useState('')
+  const [useGPS, setUseGPS] = useState(false)
+  const [gpsAvailable, setGpsAvailable] = useState(false)
+  const [gpsError, setGpsError] = useState(null)
+  const [currentSpeed, setCurrentSpeed] = useState(0)
+  const [route, setRoute] = useState([]) // Array of {lat, lng, timestamp}
   
   const intervalRef = useRef(null)
   const startTimeRef = useRef(null)
   const pausedTimeRef = useRef(0)
+  const watchIdRef = useRef(null)
+  const lastPositionRef = useRef(null)
+
+  // Check GPS availability on mount
+  useEffect(() => {
+    if ('geolocation' in navigator) {
+      setGpsAvailable(true)
+    } else {
+      setGpsAvailable(false)
+      setGpsError('GPS not available on this device')
+    }
+  }, [])
+
+  // Calculate distance between two GPS coordinates (Haversine formula)
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371 // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLon = (lon2 - lon1) * Math.PI / 180
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return R * c // Distance in km
+  }
+
+  // GPS tracking
+  useEffect(() => {
+    if (isRunning && !isPaused && useGPS && gpsAvailable) {
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
+
+      const successCallback = (position) => {
+        const { latitude, longitude, speed, accuracy } = position.coords
+        const timestamp = position.timestamp
+
+        // Add to route
+        setRoute(prev => [...prev, { 
+          lat: latitude, 
+          lng: longitude, 
+          timestamp,
+          accuracy,
+          speed: speed || 0
+        }])
+
+        // Calculate distance if we have a previous position
+        if (lastPositionRef.current) {
+          const distanceIncrement = calculateDistance(
+            lastPositionRef.current.lat,
+            lastPositionRef.current.lng,
+            latitude,
+            longitude
+          )
+          
+          // Only add distance if accuracy is good (< 50m) and increment is reasonable (< 100m)
+          if (accuracy < 50 && distanceIncrement < 0.1) {
+            setDistance(prev => prev + distanceIncrement)
+          }
+        }
+
+        // Update current speed (convert m/s to km/h)
+        if (speed !== null && speed > 0) {
+          const speedKmh = speed * 3.6
+          setCurrentSpeed(speedKmh)
+        }
+
+        lastPositionRef.current = { lat: latitude, lng: longitude }
+      }
+
+      const errorCallback = (error) => {
+        console.error('GPS Error:', error)
+        setGpsError(error.message)
+      }
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        successCallback,
+        errorCallback,
+        options
+      )
+    } else {
+      // Stop watching position
+      if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+    }
+
+    return () => {
+      if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+      }
+    }
+  }, [isRunning, isPaused, useGPS, gpsAvailable])
 
   // Timer logic
   useEffect(() => {
@@ -70,6 +171,13 @@ export default function CardioTracker({
 
   // Calculate speed (km/h or mph)
   const calculateSpeed = () => {
+    if (useGPS && currentSpeed > 0) {
+      // Use GPS speed if available
+      const speed = unit === 'km' ? currentSpeed : currentSpeed / 1.60934
+      return speed.toFixed(1)
+    }
+    
+    // Fallback to calculated speed
     if (distance === 0 || elapsedTime === 0) return '0.0'
     const timeInHours = elapsedTime / 3600000
     const speed = distance / timeInHours
@@ -83,6 +191,22 @@ export default function CardioTracker({
       pausedTimeRef.current = 0
       setIsRunning(true)
       setIsPaused(false)
+      setRoute([])
+      lastPositionRef.current = null
+      setGpsError(null)
+      
+      // Request GPS permission if using GPS
+      if (useGPS && gpsAvailable) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            console.log('GPS initialized:', position.coords)
+          },
+          (error) => {
+            console.error('GPS permission denied:', error)
+            setGpsError('GPS permission denied. Please enable location access.')
+          }
+        )
+      }
     }
   }
 
@@ -137,7 +261,9 @@ export default function CardioTracker({
       speed: calculateSpeed(),
       laps: laps,
       notes: sessionNotes,
-      calories: estimateCalories()
+      calories: estimateCalories(),
+      gpsTracked: useGPS,
+      route: useGPS ? route : null
     }
     
     onSaveSession(session)
@@ -148,6 +274,9 @@ export default function CardioTracker({
     setLaps([])
     setCurrentLap(1)
     setSessionNotes('')
+    setRoute([])
+    setCurrentSpeed(0)
+    lastPositionRef.current = null
     setShowSaveModal(false)
   }
 
@@ -231,6 +360,34 @@ export default function CardioTracker({
       {/* Tracker View */}
       {activeView === 'tracker' && (
         <div className="tracker-view">
+          {/* GPS Toggle */}
+          {gpsAvailable && (
+            <div className="gps-toggle-container">
+              <label className="gps-toggle">
+                <input
+                  type="checkbox"
+                  checked={useGPS}
+                  onChange={(e) => setUseGPS(e.target.checked)}
+                  disabled={isRunning}
+                />
+                <span className="gps-toggle-label">
+                  📍 Use GPS Tracking
+                  {useGPS && isRunning && !isPaused && (
+                    <span className="gps-active-indicator">● Live</span>
+                  )}
+                </span>
+              </label>
+              {gpsError && (
+                <div className="gps-error">⚠️ {gpsError}</div>
+              )}
+              {useGPS && !isRunning && (
+                <div className="gps-info">
+                  GPS will automatically track distance and pace
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Activity Type Selector */}
           <div className="activity-selector">
             <button
@@ -267,24 +424,33 @@ export default function CardioTracker({
               <div className="stat-box">
                 <div className="stat-label">Distance</div>
                 <div className="stat-value-container">
-                  <input
-                    type="number"
-                    className="distance-input"
-                    value={distance}
-                    onChange={(e) => setDistance(parseFloat(e.target.value) || 0)}
-                    step="0.1"
-                    min="0"
-                    disabled={isRunning}
-                  />
-                  <select
-                    className="unit-selector"
-                    value={unit}
-                    onChange={(e) => setUnit(e.target.value)}
-                    disabled={isRunning}
-                  >
-                    <option value="km">km</option>
-                    <option value="mi">mi</option>
-                  </select>
+                  {useGPS ? (
+                    <>
+                      <div className="distance-display">{distance.toFixed(2)}</div>
+                      <div className="unit-display">{unit}</div>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="number"
+                        className="distance-input"
+                        value={distance}
+                        onChange={(e) => setDistance(parseFloat(e.target.value) || 0)}
+                        step="0.1"
+                        min="0"
+                        disabled={isRunning}
+                      />
+                      <select
+                        className="unit-selector"
+                        value={unit}
+                        onChange={(e) => setUnit(e.target.value)}
+                        disabled={isRunning}
+                      >
+                        <option value="km">km</option>
+                        <option value="mi">mi</option>
+                      </select>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -393,6 +559,9 @@ export default function CardioTracker({
                       {session.type === 'walk' && '🚶'}
                       {session.type === 'cycle' && '🚴'}
                       <span>{session.type.charAt(0).toUpperCase() + session.type.slice(1)}</span>
+                      {session.gpsTracked && (
+                        <span className="gps-badge">📍 GPS</span>
+                      )}
                     </div>
                     <div className="session-date">
                       {new Date(session.date).toLocaleDateString()}
