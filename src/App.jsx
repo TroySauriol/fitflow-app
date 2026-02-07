@@ -12,6 +12,7 @@ import Logo from './components/Logo'
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [navOpen, setNavOpen] = useState(false)
   const [workoutTemplates, setWorkoutTemplates] = useState([]) // Saved workout routines (menu)
   const [calendarWorkouts, setCalendarWorkouts] = useState([]) // Scheduled/completed workouts
   const [cardioSessions, setCardioSessions] = useState([]) // Cardio tracking sessions
@@ -118,9 +119,26 @@ function App() {
     setActiveTab('chat')
   }
 
+  // Handle navigation click - close nav on mobile after selection
+  const handleNavClick = (tab) => {
+    setActiveTab(tab)
+    setNavOpen(false)
+  }
+
   return (
     <div className="app">
       <header className="app-header">
+        <button 
+          className="hamburger-menu"
+          onClick={() => setNavOpen(!navOpen)}
+          aria-label="Toggle navigation menu"
+        >
+          <span className={`hamburger-icon ${navOpen ? 'open' : ''}`}>
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </button>
         <div className="header-content">
           <Logo onNavigateHome={() => setActiveTab('dashboard')} />
           <div className="header-text">
@@ -129,46 +147,48 @@ function App() {
         </div>
       </header>
 
-      <nav className="app-nav">
+      {navOpen && <div className="nav-overlay" onClick={() => setNavOpen(false)}></div>}
+
+      <nav className={`app-nav ${navOpen ? 'open' : ''}`}>
         <button
           className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('dashboard')}
+          onClick={() => handleNavClick('dashboard')}
         >
           🏠 Dashboard
         </button>
         <button
           className={`nav-btn ${activeTab === 'chat' ? 'active' : ''}`}
-          onClick={() => setActiveTab('chat')}
+          onClick={() => handleNavClick('chat')}
         >
           💬 Chat
         </button>
         <button
           className={`nav-btn ${activeTab === 'cardio' ? 'active' : ''}`}
-          onClick={() => setActiveTab('cardio')}
+          onClick={() => handleNavClick('cardio')}
         >
           🏃 Cardio
         </button>
         <button
           className={`nav-btn ${activeTab === 'calendar' ? 'active' : ''}`}
-          onClick={() => setActiveTab('calendar')}
+          onClick={() => handleNavClick('calendar')}
         >
           📅 Calendar
         </button>
         <button
           className={`nav-btn ${activeTab === 'saved' ? 'active' : ''}`}
-          onClick={() => setActiveTab('saved')}
+          onClick={() => handleNavClick('saved')}
         >
           📋 Templates
         </button>
         <button
           className={`nav-btn ${activeTab === 'records' ? 'active' : ''}`}
-          onClick={() => setActiveTab('records')}
+          onClick={() => handleNavClick('records')}
         >
           🏆 Records
         </button>
         <button
           className={`nav-btn ${activeTab === 'progress' ? 'active' : ''}`}
-          onClick={() => setActiveTab('progress')}
+          onClick={() => handleNavClick('progress')}
         >
           📈 Progress
         </button>
