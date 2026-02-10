@@ -3,7 +3,7 @@ User-agent: *
 Allow: /
 
 # Sitemaps
-Sitemap: https://main.d3r8qvx9qkqg0h.amplifyapp.com/sitemap.xml
+Sitemap: https://main.d1ysrkmpqunjig.amplifyapp.com/sitemap.xml
 
 # Disallow admin/private areas (if any in future)
 Disallow: /api/
